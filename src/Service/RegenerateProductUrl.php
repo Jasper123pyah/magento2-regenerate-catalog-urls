@@ -112,11 +112,10 @@ class RegenerateProductUrl
                 ->addFieldToFilter('status', ['eq' => Status::STATUS_ENABLED])
                 ->addFieldToFilter('visibility', ['gt' => Visibility::VISIBILITY_NOT_VISIBLE]);
 
-            if ($productIds == null || (is_array($productIds) && empty($productIds))) {
+            if ($productIds === null || (is_array($productIds) && empty($productIds))) {
                 $productIds = $collection->getAllIds();
             }
             $collection->addIdFilter($productIds);
-
             $collection->addAttributeToSelect(['url_path', 'url_key']);
 
             $deleteProducts = [];
@@ -151,7 +150,7 @@ class RegenerateProductUrl
 
                 $product->setStoreId($store->getId());
 
-                //phpcs:ignore Magento2.Performance.ForeachArrayMerge.ForeachArrayMerge
+                // phpcs:ignore Magento2.Performance.ForeachArrayMerge.ForeachArrayMerge
                 $newUrls = array_merge($newUrls, $this->urlRewriteGenerator->generate($product));
                 if (count($newUrls) >= self::BATCH_SIZE) {
                     $regeneratedForStore += $this->replaceUrls($newUrls);
@@ -239,7 +238,8 @@ class RegenerateProductUrl
         } else {
             try {
                 $this->urlPersist->replace($urls);
-            } catch (Exception $e) {//phpcs:ignore Magento2.CodeAnalysis.EmptyBlock.DetectedCatch
+            } catch (Exception $e) {
+                // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock.DetectedCatch
             }
         }
 
@@ -250,7 +250,8 @@ class RegenerateProductUrl
     }
 
     /**
-     * Remove old product urls
+     * Previously removed old product URLs from url_rewrite table.
+     * We now skip the actual delete to preserve existing rewrites.
      *
      * @param array $productIds
      * @param StoreInterface $store
@@ -260,12 +261,20 @@ class RegenerateProductUrl
      */
     private function deleteUrls(array $productIds, StoreInterface $store, bool $last = false): void
     {
-        $this->log(sprintf('deleteUrls%s batch: %d', $last ? ' last' : '', count($productIds)));
-        $this->urlPersist->deleteByData([
-            UrlRewrite::ENTITY_ID => $productIds,
-            UrlRewrite::ENTITY_TYPE => ProductUrlRewriteGenerator::ENTITY_TYPE,
-            UrlRewrite::REDIRECT_TYPE => 0,
-            UrlRewrite::STORE_ID => $store->getId()
-        ]);
+        $this->log(
+            sprintf(
+                'Skipping deleteUrls%s batch: %d (No rewrites removed)',
+                $last ? ' last' : '',
+                count($productIds)
+            )
+        );
+
+        // Comment out the actual deletion:
+        // $this->urlPersist->deleteByData([
+        //     UrlRewrite::ENTITY_ID => $productIds,
+        //     UrlRewrite::ENTITY_TYPE => ProductUrlRewriteGenerator::ENTITY_TYPE,
+        //     UrlRewrite::REDIRECT_TYPE => 0,
+        //     UrlRewrite::STORE_ID => $store->getId()
+        // ]);
     }
 }

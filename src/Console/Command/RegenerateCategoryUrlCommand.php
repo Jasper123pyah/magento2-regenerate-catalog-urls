@@ -117,12 +117,13 @@ class RegenerateCategoryUrlCommand extends AbstractRegenerateCommand
             $currentRootId = $this->storeManager->getGroup(
                 $this->storeManager->getStore($storeId)->getStoreGroupId()
             )->getRootCategoryId();
+
             if ($rootIdOption !== false) {
                 $fromRootId = $rootIdOption;
                 if ($rootIdOption !== $currentRootId) {
                     $output->writeln(
                         sprintf(
-                            'Skipping store %s because its root category id %s, differs from the passed root category %s', //phpcs:ignore Generic.Files.LineLength.TooLong
+                            'Skipping store %s because its root category id %s differs from the passed root category %s',
                             $storeId,
                             $currentRootId,
                             $fromRootId
@@ -138,13 +139,15 @@ class RegenerateCategoryUrlCommand extends AbstractRegenerateCommand
                 sprintf('Processing store %s...', $storeId)
             );
 
-            $rootCategory = $this->categoryCollectionFactory->create()->addAttributeToFilter(
-                'entity_id',
-                $fromRootId
-            )->addAttributeToSelect("name")->getFirstItem();
+            $rootCategory = $this->categoryCollectionFactory->create()
+                ->addAttributeToFilter('entity_id', $fromRootId)
+                ->addAttributeToSelect("name")
+                ->getFirstItem();
+
             if (!$rootCategory->getId()) {
-                throw new Exception(sprintf("Root category with ID %d, was not found.", $fromRootId));
+                throw new Exception(sprintf("Root category with ID %d was not found.", $fromRootId));
             }
+
             $this->emulation->startEnvironmentEmulation($storeId, Area::AREA_FRONTEND, true);
 
             $categories = $this->categoryCollectionFactory->create()
@@ -154,10 +157,10 @@ class RegenerateCategoryUrlCommand extends AbstractRegenerateCommand
 
             $categoryIds = $input->getArgument('cids');
             if ($fromRootId) {
-                //path LIKE '1/rootcategory/%' OR path = '1/rootcategory'
+                // path LIKE '1/rootcategory/%' OR path = '1/rootcategory'
                 $categories->addAttributeToFilter('path', [
-                    'like' => '1/' . $fromRootId . '/%',
-                    '=' => '1/' . $fromRootId
+                    ['like' => '1/' . $fromRootId . '/%'],
+                    ['eq' => '1/' . $fromRootId]
                 ]);
             }
             if (!empty($categoryIds)) {
@@ -168,27 +171,28 @@ class RegenerateCategoryUrlCommand extends AbstractRegenerateCommand
                 $output->writeln(
                     sprintf(
                         'Regenerating urls for %s (%s)',
-                        implode('/', [
-                            $rootCategory->getName(),
-                            ...array_map(fn ($category) => $category->getName(), $category->getParentCategories())
-                        ]),
+                        $category->getName(),
                         $category->getId()
                     )
                 );
 
-                $this->urlPersist->deleteByData(
-                    [
-                        UrlRewrite::ENTITY_ID => $category->getId(),
-                        UrlRewrite::ENTITY_TYPE => CategoryUrlRewriteGenerator::ENTITY_TYPE,
-                        UrlRewrite::REDIRECT_TYPE => 0,
-                        UrlRewrite::STORE_ID => $storeId
-                    ]
-                );
+                // -----------------------
+                // Skip deletion here:
+                // -----------------------
+                // $this->urlPersist->deleteByData(
+                //     [
+                //         UrlRewrite::ENTITY_ID => $category->getId(),
+                //         UrlRewrite::ENTITY_TYPE => CategoryUrlRewriteGenerator::ENTITY_TYPE,
+                //         UrlRewrite::REDIRECT_TYPE => 0,
+                //         UrlRewrite::STORE_ID => $storeId
+                //     ]
+                // );
 
                 $newUrls = $this->categoryUrlRewriteGenerator->generate($category);
 
                 try {
                     $newUrls = $this->filterEmptyRequestPaths($newUrls);
+                    // Keep replace for inserts/updates:
                     $this->urlPersist->replace($newUrls);
                     $counter += count($newUrls);
                 } catch (Exception $e) {
@@ -208,8 +212,9 @@ class RegenerateCategoryUrlCommand extends AbstractRegenerateCommand
 
             $this->emulation->stopEnvironmentEmulation();
         }
+
         $output->writeln(
-            sprintf('Done regenerating. Regenerated %d urls', $counter)
+            sprintf('Done regenerating. Inserted/updated %d category URL rewrites (no deletes).', $counter)
         );
 
         return Cli::RETURN_SUCCESS;
@@ -225,15 +230,12 @@ class RegenerateCategoryUrlCommand extends AbstractRegenerateCommand
     private function filterEmptyRequestPaths(array $newUrls): array
     {
         $result = [];
-
         foreach ($newUrls as $key => $url) {
             $requestPath = $url->getRequestPath();
-
             if (!empty($requestPath)) {
                 $result[$key] = $url;
             }
         }
-
         return $result;
     }
 }
